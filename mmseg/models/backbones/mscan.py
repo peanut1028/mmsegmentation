@@ -8,11 +8,11 @@ import torch
 import torch.nn as nn
 from mmcv.cnn import build_activation_layer, build_norm_layer
 from mmcv.cnn.bricks import DropPath
-from mmengine.model import BaseModule
-from mmengine.model.weight_init import (constant_init, normal_init,
+from mmcv.cnn.utils.weight_init import (constant_init, normal_init,
                                         trunc_normal_init)
+from mmcv.runner import BaseModule
 
-from mmseg.registry import MODELS
+from mmseg.models.builder import BACKBONES
 
 
 class Mlp(BaseModule):
@@ -83,7 +83,7 @@ class StemConv(BaseModule):
                  out_channels,
                  act_cfg=dict(type='GELU'),
                  norm_cfg=dict(type='SyncBN', requires_grad=True)):
-        super().__init__()
+        super(StemConv, self).__init__()
 
         self.proj = nn.Sequential(
             nn.Conv2d(
@@ -269,9 +269,11 @@ class MSCABlock(BaseModule):
             drop=drop)
         layer_scale_init_value = 1e-2
         self.layer_scale_1 = nn.Parameter(
-            layer_scale_init_value * torch.ones(channels), requires_grad=True)
+            layer_scale_init_value * torch.ones((channels)),
+            requires_grad=True)
         self.layer_scale_2 = nn.Parameter(
-            layer_scale_init_value * torch.ones(channels), requires_grad=True)
+            layer_scale_init_value * torch.ones((channels)),
+            requires_grad=True)
 
     def forward(self, x, H, W):
         """Forward function."""
@@ -332,7 +334,7 @@ class OverlapPatchEmbed(BaseModule):
         return x, H, W
 
 
-@MODELS.register_module()
+@BACKBONES.register_module()
 class MSCAN(BaseModule):
     """SegNeXt Multi-Scale Convolutional Attention Network (MCSAN) backbone.
 
@@ -380,7 +382,7 @@ class MSCAN(BaseModule):
                  norm_cfg=dict(type='SyncBN', requires_grad=True),
                  pretrained=None,
                  init_cfg=None):
-        super().__init__(init_cfg=init_cfg)
+        super(MSCAN, self).__init__(init_cfg=init_cfg)
 
         assert not (init_cfg and pretrained), \
             'init_cfg and pretrained cannot be set at the same time'
@@ -445,7 +447,7 @@ class MSCAN(BaseModule):
                     normal_init(
                         m, mean=0, std=math.sqrt(2.0 / fan_out), bias=0)
         else:
-            super().init_weights()
+            super(MSCAN, self).init_weights()
 
     def forward(self, x):
         """Forward function."""

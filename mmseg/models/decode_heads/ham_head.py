@@ -5,10 +5,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from mmcv.cnn import ConvModule
-from mmengine.device import get_device
 
-from mmseg.registry import MODELS
-from ..utils import resize
+from mmseg.ops import resize
+from ..builder import HEADS
 from .decode_head import BaseDecodeHead
 
 
@@ -53,7 +52,7 @@ class Matrix_Decomposition_2D_Base(nn.Module):
 
         self.rand_init = rand_init
 
-    def _build_bases(self, B, S, D, R, device=None):
+    def _build_bases(self, B, S, D, R, cuda=False):
         raise NotImplementedError
 
     def local_step(self, x, bases, coef):
@@ -81,13 +80,14 @@ class Matrix_Decomposition_2D_Base(nn.Module):
         D = C // self.S
         N = H * W
         x = x.view(B * self.S, D, N)
+        cuda = 'cuda' in str(x.device)
         if not self.rand_init and not hasattr(self, 'bases'):
-            bases = self._build_bases(1, self.S, D, self.R, device=x.device)
+            bases = self._build_bases(1, self.S, D, self.R, cuda=cuda)
             self.register_buffer('bases', bases)
 
         # (S, D, R) -> (B * S, D, R)
         if self.rand_init:
-            bases = self._build_bases(B, self.S, D, self.R, device=x.device)
+            bases = self._build_bases(B, self.S, D, self.R, cuda=cuda)
         else:
             bases = self.bases.repeat(B, 1, 1)
 
@@ -116,11 +116,13 @@ class NMF2D(Matrix_Decomposition_2D_Base):
 
         self.inv_t = 1
 
-    def _build_bases(self, B, S, D, R, device=None):
+    def _build_bases(self, B, S, D, R, cuda=False):
         """Build bases in initialization."""
-        if device is None:
-            device = get_device()
-        bases = torch.rand((B * S, D, R)).to(device)
+        if cuda:
+            bases = torch.rand((B * S, D, R)).cuda()
+        else:
+            bases = torch.rand((B * S, D, R))
+
         bases = F.normalize(bases, dim=1)
 
         return bases
@@ -190,7 +192,7 @@ class Hamburger(nn.Module):
         return ham
 
 
-@MODELS.register_module()
+@HEADS.register_module()
 class LightHamHead(BaseDecodeHead):
     """SegNeXt decode head.
 
@@ -210,7 +212,8 @@ class LightHamHead(BaseDecodeHead):
     """
 
     def __init__(self, ham_channels=512, ham_kwargs=dict(), **kwargs):
-        super().__init__(input_transform='multiple_select', **kwargs)
+        super(LightHamHead, self).__init__(
+            input_transform='multiple_select', **kwargs)
         self.ham_channels = ham_channels
 
         self.squeeze = ConvModule(
